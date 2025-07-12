@@ -1,0 +1,10 @@
+[package]
+name = "frame23a"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "23a"
+path = "src/main.rs"
+
+[dependencies]
