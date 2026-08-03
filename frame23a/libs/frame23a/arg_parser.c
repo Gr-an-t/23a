@@ -21,12 +21,13 @@ void print_usage(const char *prog) {
         "frame23a " FRAME23A_VERSION " - contact sheet generator\n"
         "\n"
         "Usage:\n"
-        "  %s [sheet] [options] <file|folder>...\n"
-        "  %s remove-metadata [options] <file|folder>...\n"
+        "  %s [sheet] [options] [file|folder]...\n"
+        "  %s remove-metadata [options] [file|folder]...\n"
         "  %s check-deps\n"
         "\n"
         "Generates a PNG contact sheet per video, and one paginated sheet per\n"
         "folder of images. Output is named after the source, minus its extension.\n"
+        "With no path given, works on the current directory.\n"
         "\n"
         "Sheet options:\n"
         "  -o, --output DIR    Destination root (default: contact_sheets/ one\n"
@@ -237,15 +238,26 @@ cli_args_t parse_args(int argc, char *argv[]) {
         args.paths[args.path_count++] = av[i];
     }
 
-    if (args.path_count == 0) {
-        fprintf(stderr, "error: no input files or folders given\n");
-        print_usage(argv[0]);
-        goto done;
-    }
-
     if (args.in_place && args.cmd != CMD_REMOVE_METADATA) {
         fprintf(stderr, "error: --in-place only applies to remove-metadata\n");
         goto done;
+    }
+
+    if (args.path_count == 0) {
+        /*
+         * Bare `frame23a` works on the current directory, the way `ls` does.
+         * The one exception is an in-place scrub: rewriting every media file
+         * around you is irreversible, and too severe to trigger by typing
+         * nothing at all.
+         */
+        if (args.in_place) {
+            fprintf(stderr, "error: --in-place needs an explicit path\n");
+            fprintf(stderr, "  use '.' if you really mean every media file in this folder\n");
+            goto done;
+        }
+
+        static char cwd_default[] = ".";
+        args.paths[args.path_count++] = cwd_default;
     }
 
     if (args.quiet) args.verbose = 0;

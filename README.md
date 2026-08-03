@@ -32,18 +32,29 @@ make check-deps            # reports anything missing, with the install command
 ## Usage
 
 ```
-frame23a [sheet] [options] <file|folder>...
-frame23a remove-metadata [options] <file|folder>...
+frame23a [sheet] [options] [file|folder]...
+frame23a remove-metadata [options] [file|folder]...
 frame23a check-deps
 ```
 
-Point it at files, folders, or a mix of both:
+With no path, it works on the current directory:
+
+```sh
+cd ~/Pictures/trip && frame23a       # just go
+```
+
+Or point it at files, folders, or a mix of both:
 
 ```sh
 frame23a holiday.mp4                 # one sheet for one video
 frame23a ~/Videos ~/Pictures         # a whole tree at a time
 frame23a -R -o ~/sheets ~/Media      # recurse, explicit destination
 ```
+
+The one case that still requires an explicit path is
+`remove-metadata --in-place`: rewriting every media file around you is
+irreversible, so it will not run off a bare invocation. Pass `.` if that is
+genuinely what you want.
 
 ### Output layout
 

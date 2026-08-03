@@ -200,10 +200,26 @@ leftovers=$(find "$(dirname "$WORK/inplace.mp4")" -maxdepth 1 -name '.frame23a-*
 [ "$leftovers" -eq 0 ]
 check $? "no temp files left behind"
 
-note "argument validation"
-"$BIN" >/dev/null 2>&1
+note "bare invocation defaults to the current directory"
+mkdir -p "$WORK/cwd/shoot"
+cp "$WORK/media/short.mp4" "$WORK/photos/p_01.jpg" "$WORK/photos/p_02.jpg" "$WORK/cwd/shoot/"
+(cd "$WORK/cwd/shoot" && "$BIN" -q >/dev/null 2>&1)
+assert_png "$WORK/cwd/contact_sheets/videos/short.png" 800 "bare run processes cwd"
+
+# basename(".") would name this "..png"; the folder's real name is required.
+assert_png "$WORK/cwd/contact_sheets/images/shoot.png" 200 "folder sheet named after the real folder"
+
+rm -rf "$WORK/cwd/contact_sheets"
+(cd "$WORK/cwd/shoot" && "$BIN" -q ./ >/dev/null 2>&1)
+assert_png "$WORK/cwd/contact_sheets/images/shoot.png" 200 "trailing slash resolves the same"
+
+# An in-place scrub of everything around you is irreversible, so it must not
+# be reachable by typing nothing.
+(cd "$WORK/cwd/shoot" && "$BIN" remove-metadata --in-place >/dev/null 2>&1)
 [ $? -eq 2 ]
-check $? "no arguments exits 2"
+check $? "bare --in-place is refused"
+
+note "argument validation"
 
 "$BIN" --bogus-flag foo >/dev/null 2>&1
 [ $? -eq 2 ]

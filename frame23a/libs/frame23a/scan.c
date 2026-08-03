@@ -107,6 +107,24 @@ media_kind_t scan_classify(const char *path) {
     return MEDIA_OTHER;
 }
 
+/*
+ * Names the sheet after the folder's real name. Taking the basename of the
+ * path as typed would yield "." for a bare `frame23a` in the current
+ * directory, producing a file called "..png".
+ */
+static char *dir_label(const char *dir) {
+    char *abs = realpath(dir, NULL);
+    char *label = fs_basename_dup(abs ? abs : dir);
+    free(abs);
+
+    if (label && (strcmp(label, "/") == 0 || strcmp(label, ".") == 0)) {
+        free(label);
+        label = fs_strdup("root");
+    }
+
+    return label;
+}
+
 static int collect_dir(worklist_t *w, const char *dir, int recursive) {
     DIR *d = opendir(dir);
     if (!d) {
@@ -142,7 +160,7 @@ static int collect_dir(worklist_t *w, const char *dir, int recursive) {
 
     /* One sheet per folder, so the folder's images become a single group. */
     if (images.count > 0) {
-        char *label = fs_basename_dup(dir);
+        char *label = dir_label(dir);
         image_group_t *g = label ? worklist_add_group(w, label, dir) : NULL;
         free(label);
 
