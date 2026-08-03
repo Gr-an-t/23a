@@ -45,10 +45,17 @@ static void sample_aspect(const sheet_ctx_t *ctx, const pathlist_t *images, int 
 
 static int render_tile(const sheet_ctx_t *ctx, const char *src, const grid_t *g,
                        const char *out_png) {
+    /*
+     * format=rgb24 is load-bearing, not cosmetic. Images with alpha yield rgba
+     * tiles while the rest yield rgb24, and a pixel-format change part-way
+     * through the sequence makes ffmpeg reinitialise the filtergraph, which
+     * flushes the tile filter early and silently truncates the sheet to
+     * however many tiles preceded the change.
+     */
     char filter[512];
     snprintf(filter, sizeof(filter),
              "scale=%d:%d:force_original_aspect_ratio=decrease,"
-             "pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=" SHEET_TILE_BG,
+             "pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=" SHEET_TILE_BG ",format=rgb24",
              g->tile_w, g->tile_h, g->tile_w, g->tile_h);
 
     argv_t a;

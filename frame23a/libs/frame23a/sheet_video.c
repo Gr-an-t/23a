@@ -65,9 +65,11 @@ static pid_t spawn_frame(const sheet_ctx_t *ctx, const char *src, const grid_t *
     int use_thumbnail = win >= 0.2;
     if (use_thumbnail) strbuf_printf(&filter, "thumbnail=30,");
 
+    /* Uniform format for the same reason as image tiles: a mid-sequence
+     * pixel-format change would truncate the grid. */
     strbuf_printf(&filter,
                   "scale=%d:%d:force_original_aspect_ratio=decrease,"
-                  "pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=" SHEET_TILE_BG,
+                  "pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=" SHEET_TILE_BG ",format=rgb24",
                   g->tile_w, g->tile_h, g->tile_w, g->tile_h);
 
     if (ts_text) {

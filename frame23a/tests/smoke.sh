@@ -167,6 +167,36 @@ msg=$("$BIN" --flat --dry-run "$WORK/tree" 2>&1 | grep -c 'subfolders')
 [ "$msg" -ge 1 ]
 check $? "--flat reports what it passed over"
 
+note "mixed alpha and non-alpha images all reach the sheet"
+# Regression: tiles from images with alpha come out rgba while the rest are
+# rgb24, and a pixel-format change part-way through the sequence used to make
+# ffmpeg reinitialise the filtergraph, flushing the tile filter early and
+# truncating the sheet to however many tiles preceded the change.
+mkdir -p "$WORK/alpha"
+for i in $(seq 1 12); do
+    n=$(printf '%02d' "$i")
+    if [ $((i % 2)) -eq 0 ]; then
+        # rgba source -> rgba tile
+        ffmpeg -hide_banner -v error -f lavfi -i color=c=white:s=400x300 \
+            -frames:v 1 -pix_fmt rgba -y "$WORK/alpha/a_$n.png"
+    else
+        # rgb source -> rgb24 tile
+        ffmpeg -hide_banner -v error -f lavfi -i color=c=white:s=400x300 \
+            -frames:v 1 -y "$WORK/alpha/a_$n.jpg"
+    fi
+done
+
+"$BIN" -q -o "$WORK/out_alpha" "$WORK/alpha" 2>/dev/null
+sheet="$WORK/out_alpha/images/alpha.png"
+assert_png "$sheet" 400 "mixed-format sheet rendered"
+
+# Every tile is white, so a full grid is bright; a truncated one is mostly
+# dark background. Measured with ffprobe so no ImageMagick is needed.
+yavg=$(ffprobe -v error -f lavfi -i "movie=$sheet,signalstats" \
+       -show_entries frame_tags=lavfi.signalstats.YAVG -of csv=p=0 2>/dev/null | head -1)
+awk "BEGIN{exit !(${yavg:-0} > 120)}"
+check $? "grid is not truncated at the first format change (YAVG=${yavg:-none}, want >120)"
+
 note "unreadable images are never silently dropped"
 mkdir -p "$WORK/mixedimg"
 cp "$WORK/photos/p_01.jpg" "$WORK/photos/p_02.jpg" "$WORK/photos/p_03.jpg" "$WORK/mixedimg/"
