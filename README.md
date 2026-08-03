@@ -20,7 +20,23 @@ sudo apt install ffmpeg fonts-dejavu-core   # Ubuntu / Debian
 `exiftool` is optional and only used by `remove-metadata` for HEIC/TIFF/WebP.
 JPEG, PNG and video are handled natively.
 
-## Build
+## Install
+
+Download a prebuilt binary — no compiler needed:
+
+```sh
+curl -fsSL https://github.com/Gr-an-t/23a/releases/latest/download/frame23a-linux-$(uname -m) \
+  -o ~/.local/bin/frame23a
+chmod +x ~/.local/bin/frame23a
+frame23a check-deps
+```
+
+Use `/usr/local/bin` instead of `~/.local/bin` (with `sudo`) to install for all
+users. Releases ship `x86_64` and `aarch64` builds linked statically against
+musl, so the same file runs on any Linux regardless of distro or glibc
+version. Verify with `sha256sum -c SHA256SUMS`.
+
+## Build from source
 
 ```sh
 cd frame23a
@@ -28,6 +44,10 @@ make
 sudo make install          # /usr/local/bin, override with PREFIX=
 make check-deps            # reports anything missing, with the install command
 ```
+
+Needs only a C11 compiler and make. Note that a locally built binary inherits
+your machine's glibc floor, so it will not necessarily run on an older
+distro — that is what the static release builds are for.
 
 ## Usage
 
