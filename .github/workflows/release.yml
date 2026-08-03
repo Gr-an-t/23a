@@ -1,0 +1,149 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and release (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      # Built statically against musl inside Alpine so one binary runs on any
+      # x86_64/aarch64 Linux regardless of distro or glibc version. A glibc
+      # build would carry a floor (e.g. GLIBC_2.38) that breaks older servers.
+      #
+      # Docker rather than a `container:` job because actions/checkout ships a
+      # glibc Node that cannot execute inside an Alpine container.
+      - name: Build static binary
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src/frame23a alpine:3.20 sh -c '
+            set -e
+            apk add --no-cache gcc musl-dev make
+            make clean
+            make CFLAGS="-O2 -static -Wall -Wextra -Werror" LDFLAGS="-static"
+            strip frame23a
+          '
+
+      - name: Verify it is actually static
+        working-directory: frame23a
+        run: |
+          file frame23a
+          if ldd frame23a 2>&1 | grep -qv 'not a dynamic executable'; then
+            echo "binary is dynamically linked; portability guarantee is void" >&2
+            ldd frame23a
+            exit 1
+          fi
+
+      - name: Verify the tag matches the reported version
+        working-directory: frame23a
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          reported="v$(./frame23a --version | awk '{print $2}')"
+
+          echo "tag=$tag reported=$reported"
+          if [ "$tag" != "$reported" ]; then
+            echo "tag $tag does not match FRAME23A_VERSION ($reported)" >&2
+            exit 1
+          fi
+
+      # Exercised on Ubuntu against the musl artifact itself, which is the
+      # thing users download -- not a separately compiled binary.
+      - name: Install runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core binutils
+
+      - name: Smoke tests against the release artifact
+        working-directory: frame23a
+        run: ./tests/smoke.sh "$PWD/frame23a"
+
+      - name: Stage artifact
+        run: |
+          mkdir -p dist
+          cp frame23a/frame23a "dist/frame23a-linux-${{ matrix.arch }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frame23a-linux-${{ matrix.arch }}
+          path: dist/frame23a-linux-${{ matrix.arch }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: dist
+        run: |
+          chmod +x frame23a-linux-*
+          sha256sum frame23a-linux-* | tee SHA256SUMS
+          ls -la
+
+      - name: Write release notes
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Unindented heredoc: leading whitespace would end up in the notes.
+          cat > notes.md <<EOF
+          ## Install
+
+          Static binaries. The only runtime requirements are \`ffmpeg\` (which
+          provides \`ffprobe\`) and a TrueType font:
+
+          \`\`\`sh
+          sudo pacman -S ffmpeg ttf-dejavu            # Arch
+          sudo apt install ffmpeg fonts-dejavu-core   # Ubuntu / Debian
+          \`\`\`
+
+          Then:
+
+          \`\`\`sh
+          curl -fsSL https://github.com/$REPO/releases/download/$TAG/frame23a-linux-\$(uname -m) \\
+            -o ~/.local/bin/frame23a
+          chmod +x ~/.local/bin/frame23a
+          frame23a check-deps
+          \`\`\`
+
+          Linked statically against musl, so the same binary runs on any
+          x86_64 or aarch64 Linux regardless of distro or glibc version.
+          Verify with \`sha256sum -c SHA256SUMS\`.
+          EOF
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          gh release create "$TAG" \
+            --title "frame23a $TAG" \
+            --notes-file notes.md \
+            dist/*

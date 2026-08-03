@@ -1,0 +1,115 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: frame23a
+
+jobs:
+  # Ubuntu and Arch differ in font layout and package names, which is exactly
+  # what the tool has to paper over, so both are built and exercised.
+  ubuntu:
+    name: ubuntu (${{ matrix.cc }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg fonts-dejavu-core binutils ${{ matrix.cc }}
+
+      - name: Build
+        run: make CC=${{ matrix.cc }} CFLAGS="-O2 -Werror"
+
+      - name: Check dependencies
+        run: ./frame23a check-deps
+
+      - name: Smoke tests
+        run: ./tests/smoke.sh
+
+      - name: Install and run from PATH
+        run: |
+          sudo make install PREFIX=/usr/local
+          frame23a --version
+          frame23a check-deps
+
+  arch:
+    name: arch
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      # Installed before checkout so the action has git available.
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel git gcc make ffmpeg ttf-dejavu
+
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: make CFLAGS="-O2 -Werror"
+
+      - name: Check dependencies
+        run: ./frame23a check-deps
+
+      - name: Smoke tests
+        run: ./tests/smoke.sh
+
+      - name: Install and run from PATH
+        run: |
+          make install PREFIX=/usr/local
+          frame23a --version
+
+  # Guards the "one hard dependency" claim: the binary must still build and
+  # report a clear, distro-correct install hint when ffmpeg is absent.
+  no-ffmpeg:
+    name: builds and fails cleanly without ffmpeg
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: make CFLAGS="-O2 -Werror"
+
+      - name: check-deps reports ffmpeg missing
+        run: |
+          mkdir -p /tmp/emptybin
+          out=$(PATH=/tmp/emptybin ./frame23a check-deps 2>&1) && rc=0 || rc=$?
+
+          echo "$out"
+          test "$rc" -ne 0 || { echo "expected non-zero exit"; exit 1; }
+          grep -q "ffmpeg" <<<"$out" || { echo "expected ffmpeg to be named"; exit 1; }
+          grep -qE "apt install|pacman -S|package manager" <<<"$out" \
+            || { echo "expected an install hint"; exit 1; }
+
+  sanitizers:
+    name: asan + ubsan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core binutils
+
+      - name: Build instrumented
+        run: make CFLAGS="-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer"
+             LDFLAGS="-fsanitize=address,undefined"
+
+      - name: Smoke tests under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ./tests/smoke.sh
