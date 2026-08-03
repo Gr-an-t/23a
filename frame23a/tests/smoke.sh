@@ -143,18 +143,44 @@ mkdir -p "$WORK/empty"
 "$BIN" -o "$WORK/out_empty" "$WORK/empty" >/dev/null 2>&1
 check $? "empty folder exits 0 with a warning"
 
-note "recursion"
+note "recursion is the default; --flat opts out"
 mkdir -p "$WORK/tree/a" "$WORK/tree/b"
 cp "$WORK/photos/p_01.jpg" "$WORK/tree/a/"
 cp "$WORK/photos/p_02.jpg" "$WORK/tree/b/"
-"$BIN" -q -o "$WORK/out_flat" "$WORK/tree" >/dev/null 2>&1
-[ ! -d "$WORK/out_flat/images" ]
-check $? "flat scan ignores subfolders"
 
-"$BIN" -q -R -o "$WORK/out_rec" "$WORK/tree" 2>/dev/null
-n=$(find "$WORK/out_rec/images" -name '*.png' | wc -l)
+"$BIN" -q -o "$WORK/out_rec" "$WORK/tree" 2>/dev/null
+n=$(find "$WORK/out_rec/images" -name '*.png' 2>/dev/null | wc -l)
 [ "$n" -eq 2 ]
-check $? "-R produces one sheet per subfolder (got $n)"
+check $? "bare run reaches pictures in subfolders (got $n)"
+
+"$BIN" -q --flat -o "$WORK/out_flat" "$WORK/tree" >/dev/null 2>&1
+[ ! -d "$WORK/out_flat/images" ]
+check $? "--flat stays in the named folder"
+
+# -R predates the default flip and must keep working in existing commands.
+"$BIN" -q -R -o "$WORK/out_r" "$WORK/tree" 2>/dev/null
+n=$(find "$WORK/out_r/images" -name '*.png' 2>/dev/null | wc -l)
+[ "$n" -eq 2 ]
+check $? "-R still accepted (got $n)"
+
+msg=$("$BIN" --flat --dry-run "$WORK/tree" 2>&1 | grep -c 'subfolders')
+[ "$msg" -ge 1 ]
+check $? "--flat reports what it passed over"
+
+note "unreadable images are never silently dropped"
+mkdir -p "$WORK/mixedimg"
+cp "$WORK/photos/p_01.jpg" "$WORK/photos/p_02.jpg" "$WORK/photos/p_03.jpg" "$WORK/mixedimg/"
+for i in 1 2 3 4 5; do head -c 512 /dev/urandom > "$WORK/mixedimg/broken_$i.heic"; done
+
+# -q on purpose: an incomplete sheet must be reported even when quietened.
+out=$("$BIN" -q -o "$WORK/out_broken" "$WORK/mixedimg" 2>&1)
+grep -q 'could not be read' <<<"$out"
+check $? "quiet run still warns about unreadable images"
+
+grep -qE '5 of 8' <<<"$out"
+check $? "warning names how many of how many (got: ${out:-none})"
+
+assert_png "$WORK/out_broken/images/mixedimg.png" 200 "sheet still produced from the readable ones"
 
 note "remove-metadata: video"
 ffmpeg -hide_banner -v error -i "$WORK/media/short.mp4" -c copy \

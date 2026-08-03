@@ -68,7 +68,7 @@ Or point it at files, folders, or a mix of both:
 ```sh
 frame23a holiday.mp4                 # one sheet for one video
 frame23a ~/Videos ~/Pictures         # a whole tree at a time
-frame23a -R -o ~/sheets ~/Media      # recurse, explicit destination
+frame23a --flat -o ~/sheets ~/Media  # this folder only, explicit destination
 ```
 
 The one case that still requires an explicit path is
@@ -96,6 +96,15 @@ Each video gets its own sheet. Each *folder* of images gets one sheet, named
 after the folder, paginated as `trip_01.png`, `trip_02.png`… when there are
 more photos than fit at a legible size. A single image file passed on its own
 gets a solo sheet with a detail header.
+
+Subfolders are included by default, each producing its own sheet — pointing at
+a folder means every picture under it. Pass `--flat` to stay at the top level;
+a flat run reports how many files it passed over.
+
+Images ffmpeg cannot decode (HEIC without libheif support, for instance) are
+counted and named in a warning, and the sheet header records how many were
+shown versus unreadable, so a sheet never silently claims pictures it does not
+contain.
 
 ### How frames are chosen
 
@@ -130,7 +139,8 @@ producing a neat grid of unrecognisable thumbnails.
 | `--no-timestamps` | off | Omit the bottom-right timestamp overlay |
 | `--font PATH` | auto | TrueType font override |
 | `-j, --jobs N` | 4 | Parallel frame extractions |
-| `-R, --recursive` | off | Descend into subfolders |
+| `--flat` | off | Only the named folder, no subfolders |
+| `-R, --recursive` | on | Descend into subfolders (now the default) |
 | `--dry-run` | off | Report what would be written |
 | `-v` / `-q` | | Show each ffmpeg command / errors only |
 

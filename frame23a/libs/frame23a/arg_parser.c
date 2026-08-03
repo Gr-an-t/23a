@@ -14,6 +14,7 @@ enum {
     OPT_FONT,
     OPT_IN_PLACE,
     OPT_DRY_RUN,
+    OPT_FLAT,
 };
 
 void print_usage(const char *prog) {
@@ -48,7 +49,10 @@ void print_usage(const char *prog) {
         "                      file still decodes\n"
         "\n"
         "Common options:\n"
-        "  -R, --recursive     Descend into subfolders\n"
+        "      --flat          Only the named folder; do not descend into\n"
+        "                      subfolders (default is to include them)\n"
+        "  -R, --recursive     Descend into subfolders (now the default; kept\n"
+        "                      so existing commands keep working)\n"
         "  -f, --file PATH     Add an input path (positional args work too)\n"
         "      --dry-run       Report what would be written, write nothing\n"
         "  -v, --verbose       Show each command as it runs\n"
@@ -143,6 +147,10 @@ cli_args_t parse_args(int argc, char *argv[]) {
     args.width = DEFAULT_WIDTH;
     args.jobs = DEFAULT_JOBS;
 
+    /* Pointing at a folder means every picture under it, not just the ones
+     * that happen to sit at the top level. --flat opts out. */
+    args.recursive = 1;
+
     args.paths = calloc((size_t)argc + 1, sizeof(char *));
     if (!args.paths) {
         fprintf(stderr, "error: out of memory\n");
@@ -179,6 +187,7 @@ cli_args_t parse_args(int argc, char *argv[]) {
         {"jobs",          required_argument, NULL, 'j'},
         {"file",          required_argument, NULL, 'f'},
         {"recursive",     no_argument,       NULL, 'R'},
+        {"flat",          no_argument,       NULL, OPT_FLAT},
         {"verbose",       no_argument,       NULL, 'v'},
         {"quiet",         no_argument,       NULL, 'q'},
         {"help",          no_argument,       NULL, 'h'},
@@ -200,6 +209,7 @@ cli_args_t parse_args(int argc, char *argv[]) {
             case 'o': args.output = optarg; break;
             case 'f': args.paths[args.path_count++] = optarg; break;
             case 'R': args.recursive = 1; break;
+            case OPT_FLAT: args.recursive = 0; break;
             case 'v': args.verbose = 1; break;
             case 'q': args.quiet = 1; break;
             case OPT_NO_TIMESTAMPS: args.no_timestamps = 1; break;

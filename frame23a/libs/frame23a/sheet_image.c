@@ -94,7 +94,7 @@ static void clear_tiles(const sheet_ctx_t *ctx, int count) {
 
 static int build_page(const sheet_ctx_t *ctx, const image_group_t *group, grid_t *g,
                       int first, int count, int page, int pages, off_t total_size,
-                      const char *out_png) {
+                      const char *out_png, int *out_unreadable) {
     int got = 0;
 
     for (int i = 0; i < count; i++) {
@@ -114,8 +114,11 @@ static int build_page(const sheet_ctx_t *ctx, const image_group_t *group, grid_t
         free(dst);
     }
 
+    if (out_unreadable) *out_unreadable += count - got;
+
     if (got == 0) {
-        fprintf(stderr, "error: no readable images for %s\n", group->label);
+        fprintf(stderr, "error: none of the %d image%s for %s could be read\n", count,
+                count == 1 ? "" : "s", group->label);
         return 0;
     }
 
@@ -160,7 +163,8 @@ static int build_page(const sheet_ctx_t *ctx, const image_group_t *group, grid_t
         textbuf_image_header(&tb, base ? base : group->label, &mi, total_size);
         free(base);
     } else {
-        textbuf_folder_header(&tb, group->label, group->images.count, total_size, page, pages);
+        textbuf_folder_header(&tb, group->label, group->images.count, total_size, page, pages,
+                              got, count - got);
     }
 
     ok = sheet_render_header(ctx, &tb, g->grid_w, header_png, NULL) &&
@@ -217,6 +221,7 @@ int sheet_image_build(const sheet_ctx_t *ctx, const image_group_t *group, const 
     }
 
     int all_ok = 1;
+    int unreadable = 0;
 
     for (int p = 0; p < pages; p++) {
         int first = p * per_page;
@@ -238,13 +243,25 @@ int sheet_image_build(const sheet_ctx_t *ctx, const image_group_t *group, const 
 
         if (!ctx->quiet) printf("%s\n", out_png);
 
-        if (build_page(ctx, group, &g, first, count, p + 1, pages, total_size, out_png)) {
+        if (build_page(ctx, group, &g, first, count, p + 1, pages, total_size, out_png,
+                       &unreadable)) {
             if (sheets_written) (*sheets_written)++;
         } else {
             all_ok = 0;
         }
 
         free(out_png);
+    }
+
+    /*
+     * Reported even under -q: a sheet that quietly omits half the folder is
+     * worse than a noisy one. Common cause is HEIC without libheif support.
+     */
+    if (unreadable > 0) {
+        fprintf(stderr, "warning: %d of %d image%s in %s could not be read and %s not on the "
+                        "sheet\n",
+                unreadable, group->images.count, group->images.count == 1 ? "" : "s",
+                group->label, unreadable == 1 ? "is" : "are");
     }
 
     return all_ok;

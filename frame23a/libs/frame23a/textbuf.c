@@ -75,7 +75,7 @@ void textbuf_image_header(textbuf_t *tb, const char *name, const media_info_t *m
 }
 
 void textbuf_folder_header(textbuf_t *tb, const char *name, int count, off_t total,
-                           int page, int pages) {
+                           int page, int pages, int shown, int unreadable) {
     char human[32];
     fs_human_size(total, human, sizeof(human));
 
@@ -83,4 +83,8 @@ void textbuf_folder_header(textbuf_t *tb, const char *name, int count, off_t tot
     textbuf_line(tb, "%d image%s    Total: %s", count, count == 1 ? "" : "s", human);
 
     if (pages > 1) textbuf_line(tb, "Page %d of %d", page, pages);
+
+    if (unreadable > 0) {
+        textbuf_line(tb, "%d shown, %d could not be read", shown, unreadable);
+    }
 }

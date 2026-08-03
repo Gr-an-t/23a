@@ -23,7 +23,12 @@ int textbuf_write(const textbuf_t *tb, const char *path);
 
 void textbuf_video_header(textbuf_t *tb, const char *name, const media_info_t *mi, int frames);
 void textbuf_image_header(textbuf_t *tb, const char *name, const media_info_t *mi, off_t size);
+/*
+ * `shown` and `unreadable` describe this sheet specifically. Reporting only
+ * the file count would claim images the grid does not actually contain when
+ * some fail to decode.
+ */
 void textbuf_folder_header(textbuf_t *tb, const char *name, int count, off_t total,
-                           int page, int pages);
+                           int page, int pages, int shown, int unreadable);
 
 #endif

@@ -134,6 +134,17 @@ int run_sheet(const cli_args_t *args, const tools_t *tools) {
         worklist_init(&w);
         scan_collect(&w, input, args->recursive);
 
+        /* Say so rather than quietly leaving subfolder media out of the run. */
+        if (!args->recursive && !args->quiet && fs_is_dir(input)) {
+            int nested = scan_count_nested(input);
+            if (nested > 0) {
+                fprintf(stderr, "note: %d media file%s in subfolders of %s %s not included; "
+                                "pass -R to include %s\n",
+                        nested, nested == 1 ? "" : "s", input, nested == 1 ? "was" : "were",
+                        nested == 1 ? "it" : "them");
+            }
+        }
+
         if (w.videos.count == 0 && w.group_count == 0) {
             fprintf(stderr, "warning: no media found in %s\n", input);
             worklist_free(&w);

@@ -178,6 +178,53 @@ static int collect_dir(worklist_t *w, const char *dir, int recursive) {
     return 1;
 }
 
+static int count_media_recursive(const char *dir) {
+    DIR *d = opendir(dir);
+    if (!d) return 0;
+
+    int n = 0;
+    struct dirent *e;
+
+    while ((e = readdir(d))) {
+        if (e->d_name[0] == '.') continue;
+
+        char *child = fs_path_join(dir, e->d_name);
+        if (!child) continue;
+
+        if (fs_is_dir(child)) {
+            n += count_media_recursive(child);
+        } else if (fs_is_file(child) && scan_classify(child) != MEDIA_OTHER) {
+            n++;
+        }
+
+        free(child);
+    }
+
+    closedir(d);
+    return n;
+}
+
+int scan_count_nested(const char *dir) {
+    DIR *d = opendir(dir);
+    if (!d) return 0;
+
+    int n = 0;
+    struct dirent *e;
+
+    while ((e = readdir(d))) {
+        if (e->d_name[0] == '.') continue;
+
+        char *child = fs_path_join(dir, e->d_name);
+        if (!child) continue;
+
+        if (fs_is_dir(child)) n += count_media_recursive(child);
+        free(child);
+    }
+
+    closedir(d);
+    return n;
+}
+
 int scan_collect(worklist_t *w, const char *path, int recursive) {
     if (fs_is_dir(path)) return collect_dir(w, path, recursive);
 

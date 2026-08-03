@@ -34,4 +34,8 @@ void worklist_free(worklist_t *w);
 media_kind_t scan_classify(const char *path);
 int scan_collect(worklist_t *w, const char *path, int recursive);
 
+/* Media sitting in subfolders that a flat scan would pass over, so the
+ * omission can be reported rather than left silent. */
+int scan_count_nested(const char *dir);
+
 #endif
