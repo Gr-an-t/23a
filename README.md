@@ -2,8 +2,9 @@
 
 [Frame 23a](https://pro.magnumphotos.com/Asset/-2K7O3RWSH81.html)
 
-`frame23a` generates PNG contact sheets from videos and image folders, and
-strips identifying metadata from media files.
+`frame23a` generates PNG contact sheets from videos and image folders — or
+animated GIF ones, where every tile is a short clip — and strips identifying
+metadata from media files.
 
 ## Dependencies
 
@@ -80,7 +81,7 @@ genuinely what you want.
 
 With no `-o`, output goes to `contact_sheets/` **one level up from the input's
 own directory**, split by media type. Sheets are named after the source with
-the extension replaced by `.png`.
+the extension replaced by `.png` (or `.gif` under `--gif`).
 
 ```
 /photos/
@@ -118,6 +119,37 @@ avoids landing on fades and blank frames.
 Frame count defaults to the video's length (4 for a few seconds, 48 for over
 an hour) and is overridden with `-n`.
 
+### Animated sheets
+
+`--gif` writes video sheets as looping GIFs. The grid, tile sizes, header and
+timestamps are identical to the PNG version — each tile just plays a second of
+motion from its sample point instead of holding one frame, so a pan, a cut or a
+camera move reads at a glance where a still is ambiguous.
+
+```sh
+frame23a --gif holiday.mp4                    # 10-frame loop, ~1s, plays at 10 fps
+frame23a --gif --gif-frames 20 clip.mp4       # longer loop, bigger file
+frame23a --gif --gif-fps 5 -w 1000 ~/Videos   # slower, smaller
+```
+
+The loop is centred on the same sample point the still would have used, and is
+sampled at `--gif-fps`, so `--gif-frames 10 --gif-fps 10` covers one second of
+source and plays back at real time. Halving the fps gives a slower loop over
+the same second, not a longer one. A clip that runs out of source part way
+through a loop holds its last frame rather than dropping the tile.
+
+Two things to expect. An animated sheet takes a few times as long to build as
+the still (roughly 3–4× at the default loop length, since the seek per sample
+costs the same either way), and it is megabytes rather than kilobytes — around
+1 MB for a 1600px sheet against 200 KB for the PNG. Both scale about linearly
+with `--gif-frames`, so halving the loop halves both; `-w` is the other lever.
+GIF is also limited to 256 colours per frame, and one palette is computed for
+the whole loop so that static areas do not shimmer, which costs a little
+fidelity in the tiles.
+
+Image sheets are unaffected by `--gif` and stay PNG; there is nothing to
+animate in a folder of photographs.
+
 ### Sizing
 
 Columns are derived so the sheet lands near 16:9 given the source's aspect
@@ -136,6 +168,9 @@ producing a neat grid of unrecognisable thumbnails.
 | `-w, --width PX` | 1600 | Target sheet width |
 | `-m, --min-tile PX` | 320 / 260 | Minimum tile size before the sheet grows |
 | `--per-page N` | derived | Images per sheet before paginating |
+| `--gif` | off | Video sheets as looping GIFs, tiles in motion |
+| `--gif-frames N` | 10 | Frames in the loop (max 60) |
+| `--gif-fps N` | 10 | Loop sampling and playback rate |
 | `--no-timestamps` | off | Omit the bottom-right timestamp overlay |
 | `--font PATH` | auto | TrueType font override |
 | `-j, --jobs N` | 4 | Parallel frame extractions |

@@ -27,6 +27,10 @@ typedef struct {
     int per_page; /* 0 = derive from max sheet height */
     int jobs;
 
+    int gif;        /* --gif: animated video sheets */
+    int gif_frames; /* 0 = default */
+    int gif_fps;    /* 0 = default */
+
     int recursive;
     int no_timestamps;
     int in_place;

@@ -72,6 +72,71 @@ note "default output location (one level up from the input's directory)"
 "$BIN" -q "$WORK/media/short.mp4" >/dev/null 2>&1
 assert_png "$WORK/contact_sheets/videos/short.png" 800 "auto-created contact_sheets/"
 
+note "animated video sheets"
+"$BIN" -q --gif -o "$WORK/out_gif" "$WORK/media" 2>/dev/null
+check $? "--gif run exits 0"
+
+# An animated sheet must be a real multi-frame GIF, not a still renamed, and
+# must be the same grid as the PNG it replaces.
+gif_frames() {
+    ffprobe -v error -select_streams v:0 -count_frames -show_entries stream=nb_read_frames \
+        -of csv=p=0 "$1" 2>/dev/null
+}
+
+for f in clip short; do
+    [ -f "$WORK/out_gif/videos/$f.gif" ]
+    check $? "$f.gif written with a .gif extension"
+
+    n=$(gif_frames "$WORK/out_gif/videos/$f.gif")
+    [ "${n:-0}" -eq 10 ]
+    check $? "$f.gif holds the default 10-frame loop (got ${n:-none})"
+done
+
+[ ! -f "$WORK/out_gif/videos/clip.png" ]
+check $? "--gif does not also leave a PNG behind"
+
+png_dims=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 \
+           "$WORK/out/videos/clip.png")
+gif_dims=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 \
+           "$WORK/out_gif/videos/clip.gif")
+[ "$png_dims" = "$gif_dims" ]
+check $? "animated sheet is the same grid as the still ($gif_dims vs $png_dims)"
+
+# The whole point is that the tiles move: identical frames mean the loop is
+# sampling the same instant every time.
+uniq_frames=$(ffmpeg -hide_banner -v error -i "$WORK/out_gif/videos/clip.gif" \
+              -f framemd5 -y /dev/stdout 2>/dev/null | grep -v '^#' | awk '{print $NF}' \
+              | sort -u | wc -l)
+[ "${uniq_frames:-0}" -ge 9 ]
+check $? "every frame of the loop differs (got ${uniq_frames:-0} distinct of 10)"
+
+"$BIN" -q --gif-frames 3 --gif-fps 5 -o "$WORK/out_gif_n" "$WORK/media/short.mp4" 2>/dev/null
+n=$(gif_frames "$WORK/out_gif_n/videos/short.gif")
+[ "${n:-0}" -eq 3 ]
+check $? "--gif-frames implies --gif and is honoured (got ${n:-none})"
+
+rate=$(ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=p=0 \
+       "$WORK/out_gif_n/videos/short.gif")
+[ "$rate" = "5/1" ]
+check $? "--gif-fps sets the playback rate (got ${rate:-none})"
+
+# A clip shorter than one loop runs out of source part way through; the tail is
+# held rather than dropping the tile and reshuffling the grid.
+ffmpeg -hide_banner -v error -f lavfi -i testsrc=size=320x240:rate=30:duration=0.4 \
+    -pix_fmt yuv420p -y "$WORK/media/tiny.mp4"
+"$BIN" -q --gif -o "$WORK/out_gif_tiny" "$WORK/media/tiny.mp4" 2>/dev/null
+n=$(gif_frames "$WORK/out_gif_tiny/videos/tiny.gif")
+[ "${n:-0}" -eq 10 ]
+check $? "clip shorter than the loop still yields a full loop (got ${n:-none})"
+
+"$BIN" --gif remove-metadata "$WORK/media/short.mp4" >/dev/null 2>&1
+[ $? -eq 2 ]
+check $? "--gif on remove-metadata is refused"
+
+"$BIN" --gif-frames 1 "$WORK/media/short.mp4" >/dev/null 2>&1
+[ $? -eq 2 ]
+check $? "--gif-frames 1 rejected (a loop needs two)"
+
 note "image sheets"
 "$BIN" -q -o "$WORK/out_img" "$WORK/photos" 2>/dev/null
 check $? "image sheet run exits 0"
