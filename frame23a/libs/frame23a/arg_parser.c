@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "frame23a/arg_parser.h"
+#include "frame23a/sheet.h"
 
 #define DEFAULT_WIDTH 1600
 #define DEFAULT_JOBS 4
@@ -15,6 +16,9 @@ enum {
     OPT_IN_PLACE,
     OPT_DRY_RUN,
     OPT_FLAT,
+    OPT_GIF,
+    OPT_GIF_FRAMES,
+    OPT_GIF_FPS,
 };
 
 void print_usage(const char *prog) {
@@ -43,6 +47,12 @@ void print_usage(const char *prog) {
         "      --font PATH     TrueType font (default: auto-discovered)\n"
         "  -j, --jobs N        Parallel frame extractions (default: %d)\n"
         "\n"
+        "Animated sheets (video only; image sheets stay PNG):\n"
+        "      --gif           Write video sheets as looping GIFs, each tile a\n"
+        "                      short clip instead of a still frame\n"
+        "      --gif-frames N  Frames in the loop (default: %d, max %d)\n"
+        "      --gif-fps N     Playback and sampling rate (default: %d)\n"
+        "\n"
         "remove-metadata options:\n"
         "  -o, --output DIR    Where to write cleaned copies\n"
         "      --in-place      Overwrite originals, after verifying the scrubbed\n"
@@ -59,7 +69,8 @@ void print_usage(const char *prog) {
         "  -q, --quiet         Errors only\n"
         "  -h, --help          This message\n"
         "  -V, --version       Version\n",
-        prog, prog, prog, DEFAULT_WIDTH, DEFAULT_JOBS);
+        prog, prog, prog, DEFAULT_WIDTH, DEFAULT_JOBS, SHEET_GIF_FRAMES,
+        SHEET_GIF_MAX_FRAMES, SHEET_GIF_FPS);
 }
 
 static int parse_positive(const char *val, const char *flag, int *out) {
@@ -93,7 +104,8 @@ static command_t match_command(const char *s, int *matched) {
 static int takes_value(const char *arg) {
     static const char *const with_value[] = {
         "--output", "--count", "--columns", "--width", "--min-tile",
-        "--jobs", "--file", "--per-page", "--font", NULL,
+        "--jobs", "--file", "--per-page", "--font", "--gif-frames",
+        "--gif-fps", NULL,
     };
 
     if (arg[0] != '-' || arg[1] == '\0') return 0;
@@ -197,6 +209,9 @@ cli_args_t parse_args(int argc, char *argv[]) {
         {"font",          required_argument, NULL, OPT_FONT},
         {"in-place",      no_argument,       NULL, OPT_IN_PLACE},
         {"dry-run",       no_argument,       NULL, OPT_DRY_RUN},
+        {"gif",           no_argument,       NULL, OPT_GIF},
+        {"gif-frames",    required_argument, NULL, OPT_GIF_FRAMES},
+        {"gif-fps",       required_argument, NULL, OPT_GIF_FPS},
         {NULL, 0, NULL, 0},
     };
 
@@ -216,6 +231,7 @@ cli_args_t parse_args(int argc, char *argv[]) {
             case OPT_FONT: args.font = optarg; break;
             case OPT_IN_PLACE: args.in_place = 1; break;
             case OPT_DRY_RUN: args.dry_run = 1; break;
+            case OPT_GIF: args.gif = 1; break;
 
             case 'h': args.cmd = CMD_HELP; args.valid = 1; goto done;
             case 'V': args.cmd = CMD_VERSION; args.valid = 1; goto done;
@@ -227,6 +243,21 @@ cli_args_t parse_args(int argc, char *argv[]) {
             case 'j': if (!parse_positive(optarg, "--jobs", &args.jobs)) goto done; break;
             case OPT_PER_PAGE:
                 if (!parse_positive(optarg, "--per-page", &args.per_page)) goto done;
+                break;
+            case OPT_GIF_FRAMES:
+                if (!parse_positive(optarg, "--gif-frames", &args.gif_frames)) goto done;
+                if (args.gif_frames < 2 || args.gif_frames > SHEET_GIF_MAX_FRAMES) {
+                    fprintf(stderr, "error: --gif-frames expects 2..%d, got %d\n",
+                            SHEET_GIF_MAX_FRAMES, args.gif_frames);
+                    goto done;
+                }
+                break;
+            case OPT_GIF_FPS:
+                if (!parse_positive(optarg, "--gif-fps", &args.gif_fps)) goto done;
+                if (args.gif_fps > 50) {
+                    fprintf(stderr, "error: --gif-fps expects 1..50, got %d\n", args.gif_fps);
+                    goto done;
+                }
                 break;
 
             case ':':
@@ -250,6 +281,15 @@ cli_args_t parse_args(int argc, char *argv[]) {
 
     if (args.in_place && args.cmd != CMD_REMOVE_METADATA) {
         fprintf(stderr, "error: --in-place only applies to remove-metadata\n");
+        goto done;
+    }
+
+    /* Tuning the loop without asking for one is a typo, not a request for
+     * stills, so it turns the mode on rather than being silently ignored. */
+    if (args.gif_frames || args.gif_fps) args.gif = 1;
+
+    if (args.gif && args.cmd != CMD_SHEET) {
+        fprintf(stderr, "error: --gif only applies to sheet\n");
         goto done;
     }
 

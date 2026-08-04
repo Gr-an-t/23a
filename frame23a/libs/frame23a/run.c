@@ -112,6 +112,9 @@ int run_sheet(const cli_args_t *args, const tools_t *tools) {
         .per_page = args->per_page,
         .no_timestamps = args->no_timestamps,
         .jobs = args->jobs,
+        .gif = args->gif,
+        .gif_frames = args->gif_frames,
+        .gif_fps = args->gif_fps,
         .dry_run = args->dry_run,
         .verbose = args->verbose,
         .quiet = args->quiet,
@@ -171,21 +174,22 @@ int run_sheet(const cli_args_t *args, const tools_t *tools) {
                 free(raw);
 
                 char name[512];
-                snprintf(name, sizeof(name), "%s.png", stem ? stem : "sheet");
-                char *out_png = stem ? fs_path_join(video_dir, name) : NULL;
+                snprintf(name, sizeof(name), "%s.%s", stem ? stem : "sheet",
+                         ctx.gif ? "gif" : "png");
+                char *out_path = stem ? fs_path_join(video_dir, name) : NULL;
                 free(stem);
 
-                if (!out_png) {
+                if (!out_path) {
                     failed++;
                     continue;
                 }
 
-                if (sheet_video_build(&ctx, w.videos.items[i], out_png)) {
+                if (sheet_video_build(&ctx, w.videos.items[i], out_path)) {
                     written++;
                 } else {
                     failed++;
                 }
-                free(out_png);
+                free(out_path);
             }
         }
 
